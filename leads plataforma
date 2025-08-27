@@ -1,0 +1,431 @@
+import React, { useState, useEffect } from 'react';
+
+// Definição da interface para os leads
+interface Lead {
+  id: string;
+  nome: string;
+  instagram: string;
+  cnpj: string;
+  contato: string;
+  email: string;
+  segmento: string;
+  localizacao: {
+    cidade: string;
+    estado: string;
+    regiao: string;
+  };
+  seguidores: number;
+  status: 'Positivo para prospecção' | 'Negativo / Lead frio' | 'Em negociação' | 'Novo';
+  observacoes: string;
+}
+
+// Dados de teste para simular o backend
+const MOCK_LEADS: Lead[] = [
+  {
+    id: '1', nome: 'Fashion Hub', instagram: '@fashionhub', cnpj: '12.345.678/0001-90', contato: '11987654321', email: 'contato@fashionhub.com', segmento: 'streetwear', localizacao: { cidade: 'São Paulo', estado: 'SP', regiao: 'Sudeste' }, seguidores: 25000, status: 'Novo', observacoes: '',
+  },
+  {
+    id: '2', nome: 'Praia & Sol', instagram: '@praiaesol', cnpj: '98.765.432/0001-21', contato: '21912345678', email: 'praiaesol@email.com', segmento: 'moda praia', localizacao: { cidade: 'Rio de Janeiro', estado: 'RJ', regiao: 'Sudeste' }, seguidores: 120000, status: 'Em negociação', observacoes: 'Primeiro contato realizado. Enviar proposta.',
+  },
+  {
+    id: '3', nome: 'Kids Style', instagram: '@kidsstyle', cnpj: '11.223.344/0001-55', contato: '31998765432', email: 'kidsstyle@loja.com', segmento: 'infantil', localizacao: { cidade: 'Belo Horizonte', estado: 'MG', regiao: 'Sudeste' }, seguidores: 5000, status: 'Positivo para prospecção', observacoes: 'Lead de alta prioridade. Segmento em crescimento.',
+  },
+  {
+    id: '4', nome: 'Fitness Brasil', instagram: '@fitnessbr', cnpj: '65.432.109/0001-11', contato: '47911223344', email: 'falecom@fitnessbr.com', segmento: 'fitness', localizacao: { cidade: 'Joinville', estado: 'SC', regiao: 'Sul' }, seguidores: 80000, status: 'Negativo / Lead frio', observacoes: 'Não tem interesse no momento.',
+  },
+  {
+    id: '5', nome: 'Luxo Ateliê', instagram: '@luxoatelie', cnpj: '77.889.900/0001-23', contato: '11944556677', email: 'contato@luxoatelie.com', segmento: 'luxo', localizacao: { cidade: 'São Paulo', estado: 'SP', regiao: 'Sudeste' }, seguidores: 300000, status: 'Em negociação', observacoes: 'Reunião agendada para semana que vem.',
+  },
+  {
+    id: '6', nome: 'Moda Praia SC', instagram: '@modapraiasc', cnpj: '13.579.246/0001-88', contato: '48900998877', email: 'modapraiasc@contato.com', segmento: 'moda praia', localizacao: { cidade: 'Florianópolis', estado: 'SC', regiao: 'Sul' }, seguidores: 45000, status: 'Positivo para prospecção', observacoes: 'Indicado por cliente. Alta chance de fechar negócio.',
+  },
+];
+
+// Componente principal da aplicação
+const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('buscador');
+  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
+  const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
+  const [filters, setFilters] = useState({
+    minSeguidores: 0,
+    cidade: '',
+    estado: '',
+    segmento: '',
+  });
+  const [instagramProfile, setInstagramProfile] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isXlsxLoaded, setIsXlsxLoaded] = useState(false);
+
+  // Efeito para carregar a biblioteca xlsx dinamicamente
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = "https://cdn.sheetjs.com/xlsx-0.19.2/package/dist/xlsx.full.min.js";
+    script.onload = () => {
+      setIsXlsxLoaded(true);
+      console.log('Biblioteca XLSX carregada com sucesso.');
+    };
+    script.onerror = () => {
+      console.error('Falha ao carregar a biblioteca XLSX.');
+    };
+    document.head.appendChild(script);
+
+    // Função de limpeza para remover o script quando o componente for desmontado
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
+
+  // Efeito para aplicar os filtros sempre que eles ou a lista de leads mudar
+  useEffect(() => {
+    const applyFilters = () => {
+      let tempLeads = [...leads];
+
+      // Filtro por seguidores
+      if (filters.minSeguidores > 0) {
+        tempLeads = tempLeads.filter(lead => lead.seguidores >= filters.minSeguidores * 1000);
+      }
+
+      // Filtro por cidade
+      if (filters.cidade) {
+        tempLeads = tempLeads.filter(lead => lead.localizacao.cidade.toLowerCase().includes(filters.cidade.toLowerCase()));
+      }
+
+      // Filtro por estado
+      if (filters.estado) {
+        tempLeads = tempLeads.filter(lead => lead.localizacao.estado.toLowerCase() === filters.estado.toLowerCase());
+      }
+
+      // Filtro por segmento
+      if (filters.segmento) {
+        tempLeads = tempLeads.filter(lead => lead.segmento.toLowerCase() === filters.segmento.toLowerCase());
+      }
+
+      setFilteredLeads(tempLeads);
+    };
+
+    applyFilters();
+  }, [leads, filters]);
+
+  // Função para exportar os leads filtrados para um arquivo Excel
+  const exportToExcel = (data: Lead[]) => {
+    if (!isXlsxLoaded || typeof window.XLSX === 'undefined') {
+      console.error('A biblioteca XLSX não está disponível. Aguarde o carregamento e tente novamente.');
+      return;
+    }
+    
+    // Mapeia os dados para o formato da planilha, garantindo a ordem das colunas
+    const excelData = data.map(lead => ({
+      'Nome do cliente': lead.nome,
+      'Instagram': lead.instagram,
+      'CNPJ': lead.cnpj,
+      'Contato': lead.contato,
+      'E-mail': lead.email,
+      'Segmento': lead.segmento,
+      'Localização': `${lead.localizacao.cidade}, ${lead.localizacao.estado}`,
+      'Quantidade de seguidores': lead.seguidores,
+      'Status no workflow': lead.status,
+      'Observações adicionais': lead.observacoes,
+    }));
+
+    // Cria uma nova planilha a partir dos dados mapeados
+    const worksheet = window.XLSX.utils.json_to_sheet(excelData);
+    const workbook = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
+    
+    // Escreve e baixa o arquivo .xlsx
+    window.XLSX.writeFile(workbook, 'leads_prospectados.xlsx');
+  };
+
+  // Lida com a mudança de status do lead
+  const handleStatusChange = (leadId: string, newStatus: Lead['status']) => {
+    setLeads(prevLeads =>
+      prevLeads.map(lead => (lead.id === leadId ? { ...lead, status: newStatus } : lead))
+    );
+  };
+
+  // Lida com a mudança das observações do lead
+  const handleNotesChange = (leadId: string, newNotes: string) => {
+    setLeads(prevLeads =>
+      prevLeads.map(lead => (lead.id === leadId ? { ...lead, observacoes: newNotes } : lead))
+    );
+  };
+
+  // Simula a busca de seguidores do Instagram
+  const searchFollowers = async () => {
+    if (!instagramProfile) return;
+
+    setIsLoading(true);
+    // Em uma aplicação real, aqui seria feita a chamada para a API de backend
+    // Exemplo:
+    // const response = await fetch(`/api/instagram/followers?profile=${instagramProfile}`);
+    // const newLeads = await response.json();
+    
+    // Simulação da resposta da API
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    const newMockLeads: Lead[] = [
+      {
+        id: '7', nome: 'FollowerBrand A', instagram: `@brandA`, cnpj: '00.000.000/0001-01', contato: '11911112222', email: 'brandA@email.com', segmento: 'streetwear', localizacao: { cidade: 'São Paulo', estado: 'SP', regiao: 'Sudeste' }, seguidores: 5000, status: 'Novo', observacoes: `Encontrado via seguidores de ${instagramProfile}`,
+      },
+      {
+        id: '8', nome: 'FollowerBrand B', instagram: `@brandB`, cnpj: '00.000.000/0001-02', contato: '21933334444', email: 'brandB@email.com', segmento: 'moda praia', localizacao: { cidade: 'Rio de Janeiro', estado: 'RJ', regiao: 'Sudeste' }, seguidores: 2000, status: 'Novo', observacoes: `Encontrado via seguidores de ${instagramProfile}`,
+      },
+    ];
+
+    setLeads(prevLeads => [...prevLeads, ...newMockLeads]);
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-8 font-sans antialiased text-gray-800">
+      <style>{`
+        /* Importação da fonte Inter */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+          font-family: 'Inter', sans-serif;
+        }
+      `}</style>
+      <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-10 border border-gray-200">
+        <h1 className="text-3xl md:text-4xl font-bold text-center text-gray-900 mb-2">Plataforma de Prospecção</h1>
+        <p className="text-center text-gray-500 mb-8">Encontre leads qualificados para a sua marca de vestuário.</p>
+
+        {/* Botões de navegação */}
+        <div className="flex justify-center border-b border-gray-200 mb-8">
+          <button
+            className={`px-4 py-2 text-sm md:text-base font-medium rounded-t-lg transition-colors duration-300 ${activeTab === 'buscador' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+            onClick={() => setActiveTab('buscador')}
+          >
+            Buscador
+          </button>
+          <button
+            className={`px-4 py-2 text-sm md:text-base font-medium rounded-t-lg transition-colors duration-300 ${activeTab === 'instagram' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+            onClick={() => setActiveTab('instagram')}
+          >
+            Busca Instagram
+          </button>
+          <button
+            className={`px-4 py-2 text-sm md:text-base font-medium rounded-t-lg transition-colors duration-300 ${activeTab === 'crm' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+            onClick={() => setActiveTab('crm')}
+          >
+            Workflow / CRM
+          </button>
+        </div>
+
+        {/* Conteúdo da aba "Buscador" */}
+        {activeTab === 'buscador' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold text-gray-800">Filtros de Busca</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Filtro de Seguidores */}
+              <div className="flex flex-col">
+                <label className="text-sm font-medium text-gray-700 mb-1">Seguidores no Instagram (milhares)</label>
+                <input
+                  type="number"
+                  placeholder="Ex: 50"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 transition-shadow"
+                  value={filters.minSeguidores || ''}
+                  onChange={(e) => setFilters({ ...filters, minSeguidores: Number(e.target.value) })}
+                />
+              </div>
+
+              {/* Filtro de Cidade */}
+              <div className="flex flex-col">
+                <label className="text-sm font-medium text-gray-700 mb-1">Cidade</label>
+                <input
+                  type="text"
+                  placeholder="Ex: São Paulo"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 transition-shadow"
+                  value={filters.cidade}
+                  onChange={(e) => setFilters({ ...filters, cidade: e.target.value })}
+                />
+              </div>
+
+              {/* Filtro de Estado */}
+              <div className="flex flex-col">
+                <label className="text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <input
+                  type="text"
+                  placeholder="Ex: SP"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 transition-shadow"
+                  value={filters.estado}
+                  onChange={(e) => setFilters({ ...filters, estado: e.target.value })}
+                />
+              </div>
+
+              {/* Filtro de Segmento */}
+              <div className="flex flex-col">
+                <label className="text-sm font-medium text-gray-700 mb-1">Segmento</label>
+                <select
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 transition-shadow"
+                  value={filters.segmento}
+                  onChange={(e) => setFilters({ ...filters, segmento: e.target.value })}
+                >
+                  <option value="">Todos</option>
+                  <option value="moda praia">Moda Praia</option>
+                  <option value="streetwear">Streetwear</option>
+                  <option value="fitness">Fitness</option>
+                  <option value="luxo">Luxo</option>
+                  <option value="infantil">Infantil</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tabela de Resultados */}
+            <h2 className="text-2xl font-semibold text-gray-800 mt-8">Resultados da Busca</h2>
+            {filteredLeads.length > 0 ? (
+              <>
+                <div className="flex justify-end mb-4">
+                  <button
+                    className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-md shadow hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => exportToExcel(filteredLeads)}
+                    disabled={!isXlsxLoaded}
+                    title={!isXlsxLoaded ? 'Carregando biblioteca de exportação...' : ''}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.707-8.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l4.707-4.707a1 1 0 111.414 1.414l-7 7a1 1 0 01-1.414 0l-7-7z" clipRule="evenodd" />
+                    </svg>
+                    <span>{isXlsxLoaded ? 'Exportar para Excel' : 'Carregando...'}</span>
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-lg shadow border border-gray-200">
+                  <table className="w-full min-w-[700px] table-auto">
+                    <thead>
+                      <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        <th className="px-6 py-3">Nome</th>
+                        <th className="px-6 py-3">Instagram</th>
+                        <th className="px-6 py-3">Seguidores</th>
+                        <th className="px-6 py-3">Contato</th>
+                        <th className="px-6 py-3">Segmento</th>
+                        <th className="px-6 py-3">Localização</th>
+                        <th className="px-6 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {filteredLeads.map((lead) => (
+                        <tr key={lead.id} className="hover:bg-gray-50">
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">{lead.nome}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-blue-500 hover:underline">
+                            <a href={`https://instagram.com/${lead.instagram.substring(1)}`} target="_blank" rel="noopener noreferrer">
+                              {lead.instagram}
+                            </a>
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{lead.seguidores.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{lead.contato}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{lead.segmento}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{lead.localizacao.cidade}, {lead.localizacao.estado}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm">
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              lead.status === 'Em negociação' ? 'bg-yellow-100 text-yellow-800' :
+                              lead.status === 'Positivo para prospecção' ? 'bg-green-100 text-green-800' :
+                              lead.status === 'Negativo / Lead frio' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {lead.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="text-center text-gray-500 py-8">Nenhum lead encontrado com os filtros aplicados.</p>
+            )}
+          </div>
+        )}
+
+        {/* Conteúdo da aba "Busca Instagram" */}
+        {activeTab === 'instagram' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold text-gray-800">Busca por Seguidores de Perfil</h2>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end space-y-4 sm:space-y-0 sm:space-x-4">
+              <div className="flex-grow">
+                <label className="text-sm font-medium text-gray-700 mb-1">Perfil do Instagram (@)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: @nomedamarca"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 transition-shadow"
+                  value={instagramProfile}
+                  onChange={(e) => setInstagramProfile(e.target.value)}
+                />
+              </div>
+              <button
+                className="px-6 py-2 bg-indigo-600 text-white rounded-md shadow-md hover:bg-indigo-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={searchFollowers}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <span>Buscar Seguidores</span>
+                )}
+              </button>
+            </div>
+            {/* Aviso sobre a busca */}
+            <p className="text-sm text-gray-500 italic">
+              * Esta função é uma simulação. Em uma aplicação real, a busca de seguidores pode ser complexa e limitada pela API do Instagram.
+            </p>
+          </div>
+        )}
+
+        {/* Conteúdo da aba "Workflow / CRM" */}
+        {activeTab === 'crm' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold text-gray-800">Gerenciamento de Leads</h2>
+            <div className="overflow-x-auto rounded-lg shadow border border-gray-200">
+              <table className="w-full min-w-[700px] table-auto">
+                <thead>
+                  <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-6 py-3">Nome</th>
+                    <th className="px-6 py-3">Instagram</th>
+                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3">Observações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {leads.map((lead) => (
+                    <tr key={lead.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{lead.nome}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{lead.instagram}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <select
+                          className={`w-full p-1 rounded-md text-xs font-medium border focus:ring-2 transition-shadow ${
+                            lead.status === 'Em negociação' ? 'bg-yellow-100 border-yellow-300 text-yellow-800 focus:ring-yellow-500' :
+                            lead.status === 'Positivo para prospecção' ? 'bg-green-100 border-green-300 text-green-800 focus:ring-green-500' :
+                            lead.status === 'Negativo / Lead frio' ? 'bg-red-100 border-red-300 text-red-800 focus:ring-red-500' : 'bg-blue-100 border-blue-300 text-blue-800 focus:ring-blue-500'
+                          }`}
+                          value={lead.status}
+                          onChange={(e) => handleStatusChange(lead.id, e.target.value as Lead['status'])}
+                        >
+                          <option value="Novo">Novo</option>
+                          <option value="Positivo para prospecção">Positivo para prospecção</option>
+                          <option value="Negativo / Lead frio">Negativo / Lead frio</option>
+                          <option value="Em negociação">Em negociação</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        <textarea
+                          className="w-full p-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 resize-none transition-shadow"
+                          rows={2}
+                          value={lead.observacoes}
+                          onChange={(e) => handleNotesChange(lead.id, e.target.value)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Script para a biblioteca Tailwind CSS, necessário para o estilo. */}
+      <script src="https://cdn.tailwindcss.com"></script>
+    </div>
+  );
+};
+
+export default App;
